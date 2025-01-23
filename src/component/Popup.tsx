@@ -1,246 +1,255 @@
-"use client"
+"use client";
 
-import  { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { X, Clock, BarChart2, Layers, Trash2, Send, AlertCircle } from "lucide-react"
+import React, { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  X,
+  Clock,
+  BarChart2,
+  Layers,
+  Trash2,
+  Send,
+  AlertCircle,
+} from "lucide-react";
 
 interface Tab {
-  id: number
-  title: string
-  url: string
-  isActive: boolean
-  tabFavicon: string
-  lastAccessed: number
+  id: number;
+  title: string;
+  url: string;
+  isActive: boolean;
+  tabFavicon: string;
+  lastAccessed: number;
 }
 
-const calculateProductivityScore = (activeCount: number, inactiveCount: number) => {
-  const totalTabs = activeCount + inactiveCount
-  if (totalTabs === 0) return 100
-  const activeTabWeight = 1
-  const inactiveTabPenalty = 0.5
-  const maxScore = totalTabs * activeTabWeight
-  const actualScore = activeCount * activeTabWeight - inactiveCount * inactiveTabPenalty
-  const score = (actualScore / maxScore) * 100
-  return Math.round(Math.max(0, Math.min(100, score)))
-}
+const calculateProductivityScore = (
+  activeCount: number,
+  inactiveCount: number
+) => {
+  const totalTabs = activeCount + inactiveCount;
+  if (totalTabs === 0) return 100;
+  const activeTabWeight = 1;
+  const inactiveTabPenalty = 0.5;
+  const maxScore = totalTabs * activeTabWeight;
+  const actualScore =
+    activeCount * activeTabWeight - inactiveCount * inactiveTabPenalty;
+  const score = (actualScore / maxScore) * 100;
+  return Math.round(Math.max(0, Math.min(100, score)));
+};
 
-const buttonVariants = {
-  rest: { scale: 1 },
-  hover: { scale: 1.05 },
-  tap: { scale: 0.95 },
-}
+const TabItem = React.memo(
+  ({ tab, onRemove }: { tab: Tab; onRemove: (id: number) => void }) => {
+    const formatLastAccessed = (timestamp: number) => {
+      const diff = Date.now() - timestamp;
+      const minutes = Math.floor(diff / 60000);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+
+      if (days > 0) return `${days}d ago`;
+      if (hours > 0) return `${hours}h ago`;
+      return `${minutes}m ago`;
+    };
+
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="flex items-center py-2 px-3 rounded-lg bg-gray-800 mb-2"
+      >
+        <img
+          src={tab.tabFavicon || "/placeholder.svg"}
+          alt=""
+          className="w-4 h-4 mr-3"
+        />
+        <span className="flex-1 truncate text-sm text-gray-300">
+          {tab.title}
+        </span>
+        <span className="text-xs text-gray-500 mr-3">
+          {formatLastAccessed(tab.lastAccessed)}
+        </span>
+        <motion.button
+          onClick={() => onRemove(tab.id)}
+          className="text-gray-500 hover:text-red-400 transition-colors duration-200"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <X size={16} />
+        </motion.button>
+      </motion.div>
+    );
+  }
+);
 
 export default function Popup() {
-  const [tabs, setTabs] = useState<Tab[]>([])
-  const [productivityScore, setProductivityScore] = useState(0)
-  const [hours, setHours] = useState(0)
-  const [minutes, setMinutes] = useState(30)
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [productivityScore, setProductivityScore] = useState(0);
+  const [hours, setHours] = useState<number>(0);
+  const [minutes, setMinutes] = useState<number>(30);
 
   useEffect(() => {
     // Simulating fetching data from the extension
-    setTabs([
-      {
-        id: 1,
-        title: "Active Tab",
-        url: "https://example1.com",
-        isActive: true,
-        tabFavicon: "https://example1.com/favicon.ico",
-        lastAccessed: Date.now(),
-      },
-      {
-        id: 2,
-        title: "Inactive Tab 1",
-        url: "https://example2.com",
-        isActive: false,
-        tabFavicon: "https://example2.com/favicon.ico",
-        lastAccessed: Date.now() - 3600000,
-      },
-      {
-        id: 3,
-        title: "Inactive Tab 2",
-        url: "https://example3.com",
-        isActive: false,
-        tabFavicon: "https://example3.com/favicon.ico",
-        lastAccessed: Date.now() - 7200000,
-      },
-    ])
-  }, [])
+    chrome.storage.sync.get("tabs", (data) => {
+      const storedTabs = data.tabs || [];
+      storedTabs.map((tab: Tab) => ({...tab, isActive: Date.now() - tab.lastAccessed > (hours*60 + minutes)*60000}))
+      console.log(storedTabs);
+      
+      setTabs(storedTabs)
+    });
+  }, []);
 
   useEffect(() => {
-    const activeTabs = tabs.filter((tab) => tab.isActive)
-    const inactiveTabs = tabs.filter((tab) => !tab.isActive)
-    setProductivityScore(calculateProductivityScore(activeTabs.length, inactiveTabs.length))
-  }, [tabs])
+    chrome.storage.sync.get("inactivityThreshold", (data) => {
+      setHours(data.inactivityThreshold.hours);
+      setMinutes(data.inactivityThreshold.minutes);
+    })
+  }, [hours, minutes])
 
-  const removeTab = (id: number) => {
-    setTabs((prevTabs) => prevTabs.filter((tab) => tab.id !== id))
-  }
+  useEffect(() => {
+    const activeTabs = tabs.filter((tab) => tab.isActive);
+    const inactiveTabs = tabs.filter((tab) => !tab.isActive);
+    setProductivityScore(
+      calculateProductivityScore(activeTabs.length, inactiveTabs.length)
+    );
+  }, [tabs]);
+
+  const removeTab = useCallback((id: number) => {
+    chrome.tabs.remove(id);
+    setTabs((prevTabs) => prevTabs.filter((tab) => tab.id !== id));
+  }, []);
 
   const removeAllInactive = () => {
-    setTabs((prevTabs) => prevTabs.filter((tab) => tab.isActive))
-  }
+    tabs.forEach((tab) => {
+      if(!tab.isActive) {
+        chrome.tabs.remove(tab.id)
+      }
+    })
+    setTabs((prevTabs) => prevTabs.filter((tab) => tab.isActive));
+  };
 
   const organizeTabs = () => {
-    console.log("Organizing tabs...")
-  }
+    console.log("Organizing tabs...");
+  };
 
   const submitInactivityThreshold = () => {
-    console.log(`Inactivity threshold set to ${hours}h ${minutes}m`)
-    // Here you would typically send this data to the background script
-  }
+    console.log(`Inactivity threshold set to ${hours}h ${minutes}m`);
+    const inactivityThreshold = {hours: hours, minutes: minutes};
+    chrome.storage.sync.set({inactivityThreshold: inactivityThreshold})
+  };
 
-  const formatLastAccessed = (timestamp: number) => {
-    const diff = Date.now() - timestamp
-    const minutes = Math.floor(diff / 60000)
-    const hours = Math.floor(minutes / 60)
-    const days = Math.floor(hours / 24)
-
-    if (days > 0) return `${days}d ago`
-    if (hours > 0) return `${hours}h ago`
-    return `${minutes}m ago`
-  }
-
-  const inactiveTabs = tabs.filter((tab) => !tab.isActive)
+  const inactiveTabs = tabs.filter((tab) => !tab.isActive);
 
   return (
-    <div className="w-80 p-4 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100 font-sans">
-      <h1 className="text-2xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">
-        Tab Habit Tracker
-      </h1>
+    <div className="w-80 p-6 bg-gray-900 text-gray-100 font-sans border-none">
+      <h1 className="text-2xl font-bold mb-6 text-center">Tab Habit Tracker</h1>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg shadow-lg p-4 mb-4 border border-gray-700 max-h-60 overflow-y-auto"
-      >
-        <AnimatePresence>
-          {inactiveTabs.length > 0 ? (
-            inactiveTabs.map((tab) => (
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold mb-3 text-gray-300">
+          Inactive Tabs
+        </h2>
+        <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+          <AnimatePresence>
+            {inactiveTabs.length > 0 ? (
+              inactiveTabs.map((tab) => (
+                <TabItem key={tab.id} tab={tab} onRemove={removeTab} />
+              ))
+            ) : (
               <motion.div
-                key={tab.id}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3 }}
-                className="flex justify-between items-center py-2 border-b border-gray-700 last:border-b-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center h-12 text-gray-500"
               >
-                <div className="flex items-center flex-1 mr-2 overflow-hidden">
-                  <img src={tab.tabFavicon || "/placeholder.svg"} alt="" className="w-4 h-4 mr-2" />
-                  <span className="truncate">{tab.title}</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-xs text-gray-400 mr-2">{formatLastAccessed(tab.lastAccessed)}</span>
-                  <motion.button
-                    onClick={() => removeTab(tab.id)}
-                    className="text-red-400 hover:text-red-300 transition-colors duration-200"
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    <X size={18} />
-                  </motion.button>
-                </div>
+                <AlertCircle size={24} className="mb-2" />
+                <p className="text-sm">No inactive tabs</p>
               </motion.div>
-            ))
-          ) : (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              className="flex flex-col items-center justify-center h-20 text-gray-400"
-            >
-              <AlertCircle size={24} className="mb-2" />
-              <p className="text-sm">No inactive tabs</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg shadow-lg p-4 mb-4 border border-gray-700">
-        <div className="flex items-center justify-between mb-2">
-          <span className="flex items-center">
-            <Clock size={18} className="mr-2" /> Active tabs
-          </span>
-          <span className="font-semibold">{tabs.filter((tab) => tab.isActive).length}</span>
-        </div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="flex items-center">
-            <Clock size={18} className="mr-2" /> Inactive tabs
-          </span>
-          <span className="font-semibold">{inactiveTabs.length}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="flex items-center">
-            <BarChart2 size={18} className="mr-2" /> Productivity score
-          </span>
-          <span className="font-semibold">{productivityScore}%</span>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
-      <div className="flex justify-between mb-4 space-x-2">
+      <div className="bg-gray-800 rounded-xl p-4 mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <span className="flex items-center text-gray-300">
+            <Clock size={16} className="mr-2" /> Active tabs
+          </span>
+          <span className="font-semibold text-gray-100">
+            {tabs.filter((tab) => tab.isActive).length}
+          </span>
+        </div>
+        <div className="flex items-center justify-between mb-2">
+          <span className="flex items-center text-gray-300">
+            <Clock size={16} className="mr-2" /> Inactive tabs
+          </span>
+          <span className="font-semibold text-gray-100">
+            {inactiveTabs.length}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="flex items-center text-gray-300">
+            <BarChart2 size={16} className="mr-2" /> Productivity score
+          </span>
+          <span className="font-semibold text-gray-100">
+            {productivityScore}%
+          </span>
+        </div>
+      </div>
+
+      <div className="flex justify-between mb-6 space-x-3">
         <motion.button
           onClick={removeAllInactive}
-          className="flex-1 py-2 px-3 rounded-md text-sm font-medium bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-md hover:shadow-lg transition-all duration-200"
-          variants={buttonVariants}
-          initial="rest"
-          whileHover="hover"
-          whileTap="tap"
+          className="flex-1 py-2 px-3 rounded-lg text-sm font-medium bg-red-500 text-white transition-colors duration-200"
+          whileHover={{ backgroundColor: "#f56565" }}
+          whileTap={{ scale: 0.95 }}
         >
-          <Trash2 size={16} className="inline mr-1" /> Remove All
+          <Trash2 size={14} className="inline mr-1" /> Remove All
         </motion.button>
         <motion.button
           onClick={organizeTabs}
-          className="flex-1 py-2 px-3 rounded-md text-sm font-medium bg-gradient-to-r from-teal-400 to-blue-500 text-white shadow-md hover:shadow-lg transition-all duration-200"
-          variants={buttonVariants}
-          initial="rest"
-          whileHover="hover"
-          whileTap="tap"
+          className="flex-1 py-2 px-3 rounded-lg text-sm font-medium bg-blue-500 text-white transition-colors duration-200"
+          whileHover={{ backgroundColor: "#4299e1" }}
+          whileTap={{ scale: 0.95 }}
         >
-          <Layers size={16} className="inline mr-1" /> Organize
+          <Layers size={14} className="inline mr-1" /> Organize
         </motion.button>
       </div>
 
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg shadow-lg p-4 border border-gray-700">
-        <h2 className="text-lg font-semibold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">
+      <div className="bg-gray-800 rounded-xl p-4">
+        <h2 className="text-lg font-semibold mb-3 text-gray-300">
           Inactivity Threshold
         </h2>
-        <div className="flex justify-between items-center mb-2">
-          <div className="flex items-center">
+        <div className="flex justify-center items-center mb-3">
+          <div className="flex items-center bg-gray-700 rounded-lg overflow-hidden">
             <input
               type="number"
               value={hours}
-              onChange={(e) => setHours(Number.parseInt(e.target.value))}
-              className="w-12 p-1 border border-gray-600 rounded mr-1 text-center bg-gray-700 text-gray-100"
+              onChange={(e) => setHours(Number.parseInt(e.target.value) || 0)}
+              className="w-12 p-2 text-center bg-transparent text-gray-200 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               min="0"
               max="23"
             />
-            <span className="mr-2">h</span>
+            <span className="text-gray-400 px-1">h</span>
             <input
               type="number"
               value={minutes}
-              onChange={(e) => setMinutes(Number.parseInt(e.target.value))}
-              className="w-12 p-1 border border-gray-600 rounded mr-1 text-center bg-gray-700 text-gray-100"
+              onChange={(e) => setMinutes(Number.parseInt(e.target.value) || 0)}
+              className="w-12 p-2 text-center bg-transparent text-gray-200 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               min="0"
               max="59"
             />
-            <span>m</span>
+            <span className="text-gray-400 px-1">m</span>
           </div>
-          <span className="text-sm text-gray-400">
-            {hours}h {minutes}m
-          </span>
         </div>
         <motion.button
           onClick={submitInactivityThreshold}
-          className="w-full py-2 px-3 rounded-md text-sm font-medium bg-gradient-to-r from-green-500 to-teal-500 text-white shadow-md hover:shadow-lg transition-all duration-200"
-          variants={buttonVariants}
-          initial="rest"
-          whileHover="hover"
-          whileTap="tap"
+          className="w-full py-2 px-3 rounded-lg text-sm font-medium bg-green-500 text-white transition-colors duration-200"
+          whileHover={{ backgroundColor: "#48bb78" }}
+          whileTap={{ scale: 0.95 }}
         >
-          <Send size={16} className="inline mr-1" /> Set Threshold
+          <Send size={14} className="inline mr-1" /> Set Threshold
         </motion.button>
       </div>
     </div>
-  )
+  );
 }
-
