@@ -22,6 +22,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     });
 });
 
+
 // Handle tab creation
 chrome.tabs.onCreated.addListener((tab) => {
     chrome.storage.sync.get("tabs", (data) => {
@@ -53,6 +54,26 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         });
     }
 });
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+    chrome.tabs.get(activeInfo.tabId, (tab) => {
+      chrome.storage.sync.get("tabs", (data) => {
+        const storedTabs = data.tabs || [];
+        const updatedTabs = storedTabs.map((storedTab) => {
+          if (storedTab.id === tab.id) {
+            return { ...storedTab, lastAccessed: tab.lastAccessed };
+          }
+          return storedTab;
+        });
+  
+        console.log(updatedTabs, tab.title, "is currently active");
+        chrome.storage.sync.set({ tabs: updatedTabs });
+      });
+    });
+  });
+  
+
+
 
 // Handle tab removal
 chrome.tabs.onRemoved.addListener((tabId) => {
