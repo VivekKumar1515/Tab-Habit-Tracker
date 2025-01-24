@@ -105,7 +105,7 @@ export default function Popup() {
     chrome.storage.sync.get("tabs", (data) => {
       const storedTabs = data.tabs || [];
       setOriginalTabs(storedTabs);
-      let updatedStoredTabs: Tab[] = storedTabs.map((tab: Tab) => ({
+      const updatedStoredTabs: Tab[] = storedTabs.map((tab: Tab) => ({
         ...tab,
         isActive:
           Date.now() - tab.lastAccessed < (hours * 60 + minutes) * 60000,
@@ -113,11 +113,13 @@ export default function Popup() {
 
       chrome.tabs.query({active: true}, (result) => {
         const activeTab = result[0];
-        updatedStoredTabs = updatedStoredTabs.filter((updatedTab) => updatedTab.id !== activeTab.id)
+        const anotherUpdatedSetOfTabs: Tab[] = updatedStoredTabs.map((tab: Tab) => (
+         activeTab.id === tab.id? {...tab, isActive: true} : tab
+        ));
+        setTabs(anotherUpdatedSetOfTabs);
       })
-      setTabs(updatedStoredTabs);
     });
-  }, );
+  }, [minutes, hours]);
 
   useEffect(() => {
     chrome.storage.sync.get("inactivityThreshold", (data) => {
@@ -167,8 +169,8 @@ export default function Popup() {
   };
 
   const submitInactivityThreshold = () => {
-    const inactivityThreshold = { hours, minutes };
-    chrome.storage.sync.set({ inactivityThreshold });
+    const inactivityThreshold = { hours: hours, minutes: minutes };
+    chrome.storage.sync.set({ inactivityThreshold: inactivityThreshold });
   };
 
   const handleScroll = () => {

@@ -12,11 +12,19 @@ interface NumberInputProps {
 
 export const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, min, max, label }) => {
   const increment = () => {
-    onChange(Math.min(value + 1, max))
+    if(value === max) {
+      onChange(min)
+    } else {
+      onChange(Math.min(value + 1, max))
+    }
   }
 
   const decrement = () => {
-    onChange(Math.max(value - 1, min))
+    if(value === min) {
+      onChange(max);
+    } else {
+      onChange(Math.max(value - 1, min))
+    }
   }
 
   return (
