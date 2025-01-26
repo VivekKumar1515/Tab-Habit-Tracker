@@ -48,6 +48,7 @@ function saveTabsToStorage() {
 // Handle tab creation
 chrome.tabs.onCreated.addListener((tab) => {
     cachedTabs.push(new Tab(tab.id, tab.title || "New Tab", tab.url || "", tab.favIconUrl || "", tab.lastAccessed));
+    console.log("On Created: ", tab.title)
     saveTabsToStorage();
 });
 
@@ -62,6 +63,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
                 tabFavicon: tab.favIconUrl || updatedTab.tabFavicon,
                 lastAccessed: tab.lastAccessed
             });
+            console.log("On Updated: ", tab.title + " changeInfo: " + changeInfo)
             saveTabsToStorage();
         }
     }
@@ -81,6 +83,7 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 // Handle tab removal
 chrome.tabs.onRemoved.addListener((tabId) => {
     cachedTabs = cachedTabs.filter(t => t.id !== tabId);
+    console.log("Tab Removed: " + tabId)
     saveTabsToStorage();
 });
 
