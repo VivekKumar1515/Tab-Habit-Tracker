@@ -1,15 +1,15 @@
 {
     "manifest_version": 3,
-    "name": "Tab Habit Tracker",
-    "description": "Track, categorize, and manage your browser tabs effectively.",
-    "version" : "0.1",
+    "name": "Tabify",
+    "description": "Tabify: Declutter Your Browser, Boost Your Productivity!",
+    "version" : "1",
     "icons": {
         "48": "image.png",
         "128": "image.png"
     },
     "action": {
         "default_title": "Tab Tracker",
-        "default_icon": {
+        "default_image": {
             "16": "image.png",
             "24": "image.png",
             "32": "image.png"

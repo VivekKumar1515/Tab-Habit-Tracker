@@ -54,9 +54,10 @@ export default function Popup() {
       }))
 
       chrome.tabs.query({ active: true }, (result) => {
-        const activeTab = result[0]
+        const activeTabs = new Set();
+        result.forEach(tab => activeTabs.add(tab.id));
         const anotherUpdatedSetOfTabs: Tab[] = updatedStoredTabs.map((tab: Tab) =>
-          activeTab.id === tab.id ? { ...tab, isActive: true } : tab,
+          activeTabs.has(tab.id) ? { ...tab, isActive: true } : tab,
         )
         setTabs(anotherUpdatedSetOfTabs)
       })
