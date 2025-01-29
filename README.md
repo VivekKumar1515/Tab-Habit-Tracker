@@ -1,50 +1,78 @@
-# React + TypeScript + Vite
+# Tabify - Smart Tab Management for Productivity
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Features
 
-Currently, two official plugins are available:
+- **Track Inactive Tabs**: Automatically detects tabs that have been inactive beyond a set threshold.
+- **Remove Unused Tabs**: Select and close inactive tabs individually or all at once.
+- **Productivity Score**: Get a score based on your tab management habits.
+- **Notifications**: Receive alerts about inactive tabs with options to clear or review them.
+- **Inactivity Threshold**: Set the number of minutes and hours for inactivity before a tab is considered inactive, directly from the popup UI.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Installation
 
-## Expanding the ESLint configuration
+### From Source (Development Mode)
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+1. Clone this repository:
 
-- Configure the top-level `parserOptions` property like this:
+   ```sh
+   git clone https://github.com/VivekKumar1515/Tabify-Source-Code
+   cd Tabify-Source-Code
+   ```
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+2. Install dependencies (if applicable):
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+   ```sh
+   npm install
+   ```
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+3. Build the project (if needed):
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+   ```sh
+   npm run build
+   ```
+
+4. Open your browser and navigate to `chrome://extensions/`.
+
+5. Enable "Developer Mode" (toggle in the top right corner).
+
+6. Click "Load unpacked" and select the `dist` or `build` folder inside the project.
+
+## Usage
+
+- Configure the inactivity threshold in the extension's popup UI. You can set the number of hours and minutes a tab must be inactive before it is flagged.
+- Use the popup UI to view and manage inactive tabs.
+- Receive notifications about inactive tabs and choose to either clear or review them.
+- Monitor your Productivity Score for insights into your browsing habits.
+
+## Contributing
+
+Contributions are welcome! To contribute:
+
+1. Fork the repository.
+2. Create a feature branch:
+
+   ```sh
+   git checkout -b feature-branch
+   ```
+
+3. Commit your changes:
+
+   ```sh
+   git commit -m "Add new feature"
+   ```
+
+4. Push to the branch:
+
+   ```sh
+   git push origin feature-branch
+   ```
+
+5. Open a Pull Request.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Contact
+
+For questions or suggestions, open an issue or reach out to [vivekvasu1515@gmail.com](mailto:vivekvasu1515@gmail.com) or [GitHub](https://github.com/VivekKumar1515).
