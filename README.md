@@ -15,8 +15,8 @@
 1. Clone this repository:
 
    ```sh
-   git clone https://github.com/VivekKumar1515/Tabify.git
-   cd Tabify
+   git clone https://github.com/VivekKumar1515/Tabify-Source-Code
+   cd Tabify-Source-Code
    ```
 
 2. Install dependencies (if applicable):
