@@ -44,9 +44,45 @@ export default function Popup() {
   const [minutes, setMinutes] = useState<number>(30)
   const [groupedTabs, setGroupedTabs] = useState<{ [key: string]: Tab[] }>({})
 
+  // Helper to load tabs in chunks
+  const loadTabsFromStorage = async () => {
+    return new Promise<Tab[]>((resolve, reject) => {
+      chrome.storage.sync.get('totalTabChunks', (data) => {
+        if (chrome.runtime.lastError || !data.totalTabChunks) {
+          reject(new Error('Error fetching tab chunks'));
+          return;
+        }
+        const totalChunks = data.totalTabChunks
+        let loadedTabs: Tab[] = []
+        
+        const loadChunk = async (index: number) => {
+          return new Promise<void>((resolveChunk) => {
+            chrome.storage.sync.get([`tabs_chunk_${index}`], (chunkData) => {
+              if (chrome.runtime.lastError) {
+                console.error(`Error fetching chunk ${index}:`, chrome.runtime.lastError)
+              } else if (chunkData[`tabs_chunk_${index}`]) {
+                loadedTabs = loadedTabs.concat(chunkData[`tabs_chunk_${index}`])
+              }
+              resolveChunk()
+            })
+          })
+        }
+
+        // Load all chunks
+        const chunkPromises = []
+        for (let i = 0; i < totalChunks; i++) {
+          chunkPromises.push(loadChunk(i))
+        }
+
+        Promise.all(chunkPromises).then(() => {
+          resolve(loadedTabs)
+        }).catch(reject)
+      })
+    })
+  }
+
   useEffect(() => {
-    chrome.storage.sync.get("tabs", (data) => {
-      const storedTabs = data.tabs || []
+    loadTabsFromStorage().then((storedTabs) => {
       setOriginalTabs(storedTabs)
       const updatedStoredTabs: Tab[] = storedTabs.map((tab: Tab) => ({
         ...tab,
@@ -54,13 +90,15 @@ export default function Popup() {
       }))
 
       chrome.tabs.query({ active: true }, (result) => {
-        const activeTabs = new Set();
-        result.forEach(tab => activeTabs.add(tab.id));
-        const anotherUpdatedSetOfTabs: Tab[] = updatedStoredTabs.map((tab: Tab) =>
+        const activeTabs = new Set()
+        result.forEach(tab => activeTabs.add(tab.id))
+        const updatedTabs: Tab[] = updatedStoredTabs.map((tab: Tab) =>
           activeTabs.has(tab.id) ? { ...tab, isActive: true } : tab,
         )
-        setTabs(anotherUpdatedSetOfTabs)
+        setTabs(updatedTabs)
       })
+    }).catch((error) => {
+      console.error("Error loading tabs:", error)
     })
   }, [minutes, hours])
 
@@ -84,7 +122,7 @@ export default function Popup() {
     setOriginalTabs((prevOriginalTabs) => prevOriginalTabs.filter((ogTab) => ogTab.id !== id))
 
     chrome.storage.sync.set({ tabs: originalTabs })
-  }, [])
+  }, [originalTabs])
 
   const removeAllInactive = () => {
     const updatedTabs: Tab[] = []
@@ -178,4 +216,3 @@ export default function Popup() {
     </motion.div>
   )
 }
-
