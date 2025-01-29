@@ -6,6 +6,7 @@
 - **Remove Unused Tabs**: Select and close inactive tabs individually or all at once.
 - **Productivity Score**: Get a score based on your tab management habits.
 - **Notifications**: Receive alerts about inactive tabs with options to clear or review them.
+- **Inactivity Threshold**: Set the number of minutes and hours for inactivity before a tab is considered inactive, directly from the popup UI.
 
 ## Installation
 
@@ -38,7 +39,7 @@
 
 ## Usage
 
-- Configure the inactivity threshold in the extension settings.
+- Configure the inactivity threshold in the extension's popup UI. You can set the number of hours and minutes a tab must be inactive before it is flagged.
 - Use the popup UI to view and manage inactive tabs.
 - Receive notifications about inactive tabs and choose to either clear or review them.
 - Monitor your Productivity Score for insights into your browsing habits.
@@ -75,4 +76,3 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## Contact
 
 For questions or suggestions, open an issue or reach out to [vivekvasu1515@gmail.com](mailto:vivekvasu1515@gmail.com) or [GitHub](https://github.com/VivekKumar1515).
-
