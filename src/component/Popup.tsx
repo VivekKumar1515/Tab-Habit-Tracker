@@ -47,7 +47,7 @@ export default function Popup() {
   // Helper to load tabs in chunks
   const loadTabsFromStorage = async () => {
     return new Promise<Tab[]>((resolve, reject) => {
-      chrome.storage.sync.get('totalTabChunks', (data) => {
+      chrome.storage.local.get('totalTabChunks', (data) => {
         if (chrome.runtime.lastError || !data.totalTabChunks) {
           reject(new Error('Error fetching tab chunks'));
           return;
@@ -57,7 +57,7 @@ export default function Popup() {
         
         const loadChunk = async (index: number) => {
           return new Promise<void>((resolveChunk) => {
-            chrome.storage.sync.get([`tabs_chunk_${index}`], (chunkData) => {
+            chrome.storage.local.get([`tabs_chunk_${index}`], (chunkData) => {
               if (chrome.runtime.lastError) {
                 console.error(`Error fetching chunk ${index}:`, chrome.runtime.lastError)
               } else if (chunkData[`tabs_chunk_${index}`]) {
@@ -103,7 +103,7 @@ export default function Popup() {
   }, [minutes, hours])
 
   useEffect(() => {
-    chrome.storage.sync.get("inactivityThreshold", (data) => {
+    chrome.storage.local.get("inactivityThreshold", (data) => {
       setHours(data.inactivityThreshold?.hours || 0)
       setMinutes(data.inactivityThreshold?.minutes || 30)
     })
@@ -121,7 +121,7 @@ export default function Popup() {
     setTabs((prevTabs) => prevTabs.filter((tab) => tab.id !== id))
     setOriginalTabs((prevOriginalTabs) => prevOriginalTabs.filter((ogTab) => ogTab.id !== id))
 
-    chrome.storage.sync.set({ tabs: originalTabs })
+    chrome.storage.local.set({ tabs: originalTabs })
   }, [originalTabs])
 
   const removeAllInactive = () => {
@@ -141,12 +141,12 @@ export default function Popup() {
       prevOriginalTabs.filter((ogTab) => (Date.now() - ogTab.lastAccessed) < (minutes + hours * 60) * 60000),
     )
 
-    chrome.storage.sync.set({ tabs: originalTabs })
+    chrome.storage.local.set({ tabs: originalTabs })
   }
 
   const submitInactivityThreshold = () => {
     const inactivityThreshold = { hours: hours, minutes: minutes }
-    chrome.storage.sync.set({ inactivityThreshold: inactivityThreshold })
+    chrome.storage.local.set({ inactivityThreshold: inactivityThreshold })
   }
 
   const inactiveTabs = tabs.filter((tab) => !tab.isActive)
