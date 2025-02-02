@@ -41,6 +41,9 @@ chrome.runtime.onInstalled.addListener(async () => {
     });
   });
   await setWindows(); // Save to storage
+
+  // Set up the alarm initially after a short delay
+  setTimeout(setupAlarm, 1000);
 });
 
 async function setWindows() {
@@ -96,6 +99,9 @@ chrome.runtime.onStartup.addListener(async () => {
   } catch (error) {
     console.error("Error during startup:", error);
   }
+
+  // Set up the alarm initially after a short delay
+  setTimeout(setupAlarm, 1000);
 });
 
 // Fetch and cache inactivity threshold from storage
@@ -307,106 +313,115 @@ function getInactivityThreshold() {
   });
 }
 
-// Setup periodic inactivity check
-let intervalId; // Holds the reference to the interval
-
-// Function to set up the interval with the current inactivity threshold
-async function setupInterval() {
+// Set up an alarm-based interval for checking inactive tabs
+async function setupAlarm() {
   const intervalTime = await getInactivityThreshold();
 
-  if (intervalId) {
-    clearInterval(intervalId); // Clear the existing interval
-  }
-
-  intervalId = setInterval(async () => {
-    await loadTabsFromStorage();
-    // Get all active tabs
-    chrome.tabs.query({ active: true }, (tabs) => {
-      const activeTabs = new Set();
-      tabs.forEach((tab) => activeTabs.add(tab.id));
-
-      // Update last accessed time for active tabs
-      cachedTabs = cachedTabs.map((tab) =>
-        activeTabs.has(tab.id) ? { ...tab, lastAccessed: Date.now() } : tab
-      );
-
-      // Filter inactive tabs based on the threshold
-      cachedInactiveTabs = cachedTabs.filter(
-        (tab) => Date.now() - tab.lastAccessed > intervalTime
-      );
-
-
-      // Show notification if there are inactive tabs
-      if (cachedInactiveTabs.length > 0) {
-        chrome.notifications.create(
-          "tabifyNotification",
-          {
-            iconUrl: "notification.png",
-            title: "Inactive Tabs Detected!",
-            message: `You have ${cachedInactiveTabs.length} inactive tabs slowing you down. Choose an option below to clean them up!`,
-            type: "basic",
-            buttons: [
-              { title: "Clean All Inactive Tabs" },
-              { title: "Review Tabs" },
-            ],
-          },
-          (notificationId) => {
-          }
-        );
-      }
+  // Clear existing alarm
+  chrome.alarms.clear("tabifyAlarm", () => {
+    // Create a new alarm with the updated interval
+    chrome.alarms.create("tabifyAlarm", {
+      periodInMinutes: intervalTime / 60000, // Convert milliseconds to minutes
     });
-  }, intervalTime);
+
+    console.log("Alarm is created for time ", inactivityThreshold)
+  });
 }
 
-// Initial setup of the inactivity check interval
-setTimeout(setupInterval, 1000);
+// Function to check for inactive tabs
+async function checkInactiveTabs() {
+  console.log("Inside check inactive tabs, will send notification soon!");
+  
+  await loadTabsFromStorage();
+  await setInactivityThreshold();
+  const intervalTime = await getInactivityThreshold();
+  
+  
+  chrome.tabs.query({ active: true }, (tabs) => {
+    const activeTabs = new Set();
+    tabs.forEach((tab) => activeTabs.add(tab.id));
 
-// Listen for changes to the inactivity threshold in storage
+    // Update last accessed time for active tabs
+    cachedTabs = cachedTabs.map((tab) =>
+      activeTabs.has(tab.id) ? { ...tab, lastAccessed: Date.now() } : tab
+    );
+
+    // Filter inactive tabs
+    cachedInactiveTabs = cachedTabs.filter(
+      (tab) => Date.now() - tab.lastAccessed > intervalTime
+    );
+
+    console.log(activeTabs)
+    console.log(cachedInactiveTabs)
+    console.log(cachedInactiveTabs.length > 0)
+
+    // Show notification if inactive tabs exist
+    if (cachedInactiveTabs.length > 0) {
+      chrome.notifications.create("tabifyNotification", {
+        iconUrl: "notification.png",
+        title: "Inactive Tabs Detected!",
+        message: `You have ${cachedInactiveTabs.length} inactive tabs slowing you down. Choose an option below to clean them up!`,
+        type: "basic",
+        buttons: [
+          { title: "Clean All Inactive Tabs" },
+          { title: "Review Tabs" },
+        ],
+      }, (notificationId) => {
+        console.log("notification created with id : ", notificationId)
+      });
+    }
+  });
+}
+
+// Listen for alarm triggers and execute the check function
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "tabifyAlarm") {
+    checkInactiveTabs();
+  }
+});
+
+
+
+// Update the alarm when the inactivity threshold changes
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.inactivityThreshold && areaName === "local") {
-    inactivityThreshold = changes.inactivityThreshold.newValue; // Update the threshold
-    setupInterval(); // Re-setup the interval with the new threshold
+    inactivityThreshold = changes.inactivityThreshold.newValue;
+    setupAlarm(); // Reset the alarm with the new threshold
   }
 });
 
 // Handle button clicks in the notification
-chrome.notifications.onButtonClicked.addListener(
-  async (notificationId, buttonIndex) => {
-    if (notificationId === "tabifyNotification") {
-      if (buttonIndex === 0) {
-        // Clean all inactive tabs
-        console.log("Cleaning all Inactive Tabs....");
-        const interval = await getInactivityThreshold();
-        let wait = true;
-        // Remove all inactive tabs
-        cachedInactiveTabs.forEach((tab) => {
-          if(wait) {
-            setTimeout(() => {
-              chrome.tabs.remove(tab.id)
-            }, 500)
-            wait = false;
-          } else {
+chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIndex) => {
+  if (notificationId === "tabifyNotification") {
+    const interval = await getInactivityThreshold();
+    if (buttonIndex === 0) {
+      // Clean all inactive tabs
+      console.log("Cleaning all Inactive Tabs....");
+      let wait = true;
+
+      cachedInactiveTabs.forEach((tab) => {
+        if (wait) {
+          setTimeout(() => {
             chrome.tabs.remove(tab.id);
-          }
-          chrome.tabs.remove(tab.id)
+          }, 500);
+          wait = false;
+        } else {
+          chrome.tabs.remove(tab.id);
         }
-      );
+      });
 
-        const activeTabs = new Set();
+      const activeTabs = new Set();
+      chrome.tabs.query({ active: true }, (result) => {
+        result.forEach((tab) => activeTabs.add(tab.id));
 
-        chrome.tabs.query({ active: true }, (result) => {
-          result.forEach((tab) => activeTabs.add(tab.id));
-
-          cachedTabs = cachedTabs.filter(
-            (tab) =>
-              Date.now() - tab.lastAccessed < interval || activeTabs.has(tab.id)
-          );
-        });
-      } else if (buttonIndex === 1) {
-        // Open a new tab to review inactive tabs
-        console.log("Review Tabs clicked");
-        chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
-      }
+        cachedTabs = cachedTabs.filter(
+          (tab) => Date.now() - tab.lastAccessed < interval || activeTabs.has(tab.id)
+        );
+      });
+    } else if (buttonIndex === 1) {
+      // Open a new tab to review inactive tabs
+      console.log("Review Tabs clicked");
+      chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
     }
   }
-);
+});

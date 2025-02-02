@@ -193,7 +193,7 @@ export default function Popup() {
         <h2 className="text-sm font-medium mb-3 text-zinc-400 uppercase tracking-wider">Inactivity Threshold</h2>
         <div className="flex justify-center items-center mb-3 space-x-4">
           <NumberInput value={hours} onChange={setHours} min={0} max={23} label="Hours" />
-          <NumberInput value={minutes} onChange={setMinutes} min={0} max={59} label="Minutes" />
+          <NumberInput value={minutes} onChange={setMinutes} min={1} max={59} label="Minutes" />
         </div>
         <IOSButton onClick={submitInactivityThreshold} className="w-full">
           <Send size={14} className="inline mr-1" /> Set Threshold

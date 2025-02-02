@@ -22,7 +22,8 @@
     "permissions": ["storage",
                     "tabs",
                     "notifications",
-                    "unlimitedStorage"
+                    "unlimitedStorage",
+                    "alarms"
                 ],
     "host_permissions": ["http://*/*", "https://*/*"]
 }
