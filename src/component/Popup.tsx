@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Clock, BarChart2, Trash2, Send } from "lucide-react"
 import { NumberInput } from "./NumberInput"
@@ -17,14 +17,6 @@ interface Tab {
   lastAccessed: number
 }
 
-interface OriginalTab {
-  id: number
-  title: string
-  url: string
-  tabFavicon: string
-  lastAccessed: number
-}
-
 const calculateProductivityScore = (activeCount: number, inactiveCount: number) => {
   const totalTabs = activeCount + inactiveCount
   if (totalTabs === 0) return 100
@@ -37,7 +29,6 @@ const calculateProductivityScore = (activeCount: number, inactiveCount: number) 
 }
 
 export default function Popup() {
-  const [originalTabs, setOriginalTabs] = useState<OriginalTab[]>([])
   const [tabs, setTabs] = useState<Tab[]>([])
   const [productivityScore, setProductivityScore] = useState(0)
   const [hours, setHours] = useState<number>(0)
@@ -83,7 +74,6 @@ export default function Popup() {
 
   useEffect(() => {
     loadTabsFromStorage().then((storedTabs) => {
-      setOriginalTabs(storedTabs)
       const updatedStoredTabs: Tab[] = storedTabs.map((tab: Tab) => ({
         ...tab,
         isActive: (Date.now() - tab.lastAccessed) < (hours * 60 + minutes) * 60000,
@@ -116,32 +106,28 @@ export default function Popup() {
     setProductivityScore(calculateProductivityScore(activeTabs.length, inactiveTabs.length))
   }, [tabs])
 
-  const removeTab = useCallback((id: number) => {
+  const removeTab = ((id: number) => {
     chrome.tabs.remove(id)
     setTabs((prevTabs) => prevTabs.filter((tab) => tab.id !== id))
-    setOriginalTabs((prevOriginalTabs) => prevOriginalTabs.filter((ogTab) => ogTab.id !== id))
+  })
 
-    chrome.storage.local.set({ tabs: originalTabs })
-  }, [originalTabs])
-
-  const removeAllInactive = () => {
+  const removeAllInactive = async () => {
     const updatedTabs: Tab[] = []
-
-    tabs.forEach((tab) => {
+    let wait = true;
+    for (const tab of tabs) {
       if (!tab.isActive) {
-        chrome.tabs.remove(tab.id)
+        if (wait) {
+          chrome.tabs.remove(tab.id);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Waits before proceeding
+          wait = false;
+        }
+        else chrome.tabs.remove(tab.id);
       } else {
-        updatedTabs.push(tab)
+        updatedTabs.push(tab);
       }
-    })
+    }
 
     setTabs(updatedTabs)
-
-    setOriginalTabs((prevOriginalTabs) =>
-      prevOriginalTabs.filter((ogTab) => (Date.now() - ogTab.lastAccessed) < (minutes + hours * 60) * 60000),
-    )
-
-    chrome.storage.local.set({ tabs: originalTabs })
   }
 
   const submitInactivityThreshold = () => {

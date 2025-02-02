@@ -1,3 +1,6 @@
+// todo
+// Rewrite the notification section using alarms possibly
+
 class Tab {
   constructor(id, title, url, tabFavicon, lastAccessed) {
     this.id = id;
@@ -16,13 +19,60 @@ class Tab {
 let cachedTabs = []; // Stores all tabs
 let cachedInactiveTabs = []; // Stores inactive tabs based on threshold
 let inactivityThreshold = { minutes: 30, hours: 0 }; // Default inactivity threshold
-const windows = new Map(); // Maps window IDs to the most recently active tab in that window
+const windows = {}; // Maps window IDs to the most recently active tab in that window
 
-// Triggered when the extension is installed
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("Extension installed!");
+chrome.runtime.onInstalled.addListener(async () => {
 
-  // Fetch and cache all open tabs on installation
+  // Fetch and cache all open tabs
+  chrome.tabs.query({}, (tabs) => {
+    cachedTabs = tabs.map(
+      (tab) =>
+        new Tab(tab.id, tab.title, tab.url, tab.favIconUrl, tab.lastAccessed)
+    );
+
+    saveTabsToStorage();
+    setInactivityThreshold();
+  });
+
+  // Store currently active tabs per window
+  chrome.tabs.query({ active: true }, (tabs) => {
+    tabs.forEach((tab) => {
+      windows[tab.windowId] = tab.id;
+    });
+  });
+  await setWindows(); // Save to storage
+});
+
+async function setWindows() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ windows }, () => {
+      if (chrome.runtime.lastError) {
+        console.error("Error saving windows:", chrome.runtime.lastError);
+        return reject(chrome.runtime.lastError);
+      }
+      resolve();
+    });
+  });
+}
+
+async function loadWindows() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get("windows", (data) => {
+      if (chrome.runtime.lastError) {
+        console.error("Error loading windows:", chrome.runtime.lastError);
+        return reject(chrome.runtime.lastError);
+      }
+
+      // Ensure we merge into the existing `windows` object to retain reference
+      Object.assign(windows, data.windows || {});
+      resolve();
+    });
+  });
+}
+
+// Triggered when the browser starts up
+chrome.runtime.onStartup.addListener(async () => {
+
   chrome.tabs.query({}, (tabs) => {
     cachedTabs = tabs.map(
       (tab) =>
@@ -30,33 +80,19 @@ chrome.runtime.onInstalled.addListener(() => {
     );
 
     saveTabsToStorage(); // Save the tabs to storage
-    setInactivityThreshold(); // Fetch the inactivity threshold from storage
   });
-
-  // Set the current active tabs for all windows
-  chrome.tabs.query({ active: true }, (tabs) => {
-    tabs.forEach((tab) => {
-      windows.set(tab.windowId, tab.id);
-    });
-  });
-});
-
-// Triggered when the browser starts up
-chrome.runtime.onStartup.addListener(async () => {
-  console.log("Extension started!");
 
   try {
-    // Fetch and cache all open tabs
-    await loadTabsFromStorage(); // Load tabs from storage asynchronously
     await setInactivityThreshold(); // Fetch the inactivity threshold
-    saveTabsToStorage(); // Save the tabs to storage
 
     // Set the current active tabs for all windows
     chrome.tabs.query({ active: true }, (tabs) => {
       tabs.forEach((tab) => {
-        windows.set(tab.windowId, tab.id);
+        windows.windowId = tab.id;
       });
     });
+
+    await setWindows();
   } catch (error) {
     console.error("Error during startup:", error);
   }
@@ -69,8 +105,10 @@ async function setInactivityThreshold() {
       if (chrome.runtime.lastError) {
         return reject(chrome.runtime.lastError);
       }
-      inactivityThreshold = data.inactivityThreshold || { hours: 0, minutes: 30 }; // Default to 30 minutes if not set
-      console.log("Inactivity threshold set:", inactivityThreshold);
+      inactivityThreshold = data.inactivityThreshold || {
+        hours: 0,
+        minutes: 30,
+      }; // Default to 30 minutes if not set
       resolve();
     });
   });
@@ -84,7 +122,7 @@ function debouncedSave() {
 
   debouncedTimeout = setTimeout(() => {
     saveTabsToStorage();
-  }, 300);
+  }, 800);
 }
 
 // Function to chunk the data into smaller pieces (25 tabs per chunk)
@@ -110,7 +148,7 @@ function chunkData(data, chunkSize = 25) {
 function saveTabsToStorage() {
   // Split the tabs into smaller chunks (25 tabs per chunk)
   const tabChunks = chunkData(cachedTabs, 25);
-  
+
   tabChunks.forEach((chunk, index) => {
     chrome.storage.local.set({ [`tabs_chunk_${index}`]: chunk }, () => {
       if (chrome.runtime.lastError) {
@@ -122,7 +160,7 @@ function saveTabsToStorage() {
   });
 
   // Optionally, store the total number of chunks so you can track how many chunks exist
-  chrome.storage.local.set({ 'totalTabChunks': tabChunks.length }, () => {
+  chrome.storage.local.set({ totalTabChunks: tabChunks.length }, () => {
     if (chrome.runtime.lastError) {
       console.error("Error saving totalTabChunks:", chrome.runtime.lastError);
     } else {
@@ -134,10 +172,13 @@ function saveTabsToStorage() {
 // Fetch all tab chunks and reassemble the full list of tabs
 function loadTabsFromStorage() {
   return new Promise((resolve, reject) => {
-    chrome.storage.local.get('totalTabChunks', (data) => {
+    chrome.storage.local.get("totalTabChunks", (data) => {
       if (chrome.runtime.lastError || !data.totalTabChunks) {
-        console.error('Error fetching totalTabChunks:', chrome.runtime.lastError);
-        return reject(new Error('Failed to load tab chunks'));
+        console.error(
+          "Error fetching totalTabChunks:",
+          chrome.runtime.lastError
+        );
+        return reject(new Error("Failed to load tab chunks"));
       }
 
       const totalChunks = data.totalTabChunks;
@@ -148,7 +189,10 @@ function loadTabsFromStorage() {
       for (let i = 0; i < totalChunks; i++) {
         chrome.storage.local.get([`tabs_chunk_${i}`], (chunkData) => {
           if (chrome.runtime.lastError) {
-            console.error(`Error fetching chunk ${i}:`, chrome.runtime.lastError);
+            console.error(
+              `Error fetching chunk ${i}:`,
+              chrome.runtime.lastError
+            );
           } else if (chunkData[`tabs_chunk_${i}`]) {
             loadedTabs = loadedTabs.concat(chunkData[`tabs_chunk_${i}`]);
           }
@@ -168,7 +212,10 @@ function loadTabsFromStorage() {
 }
 
 // Create or update a tab in the cachedTabs array
-function createOrUpdate(tab) {
+async function createOrUpdate(tab) {
+  if (cachedTabs.length == 0) {
+    await loadTabsFromStorage();
+  }
   const tabIdx = cachedTabs.findIndex((t) => t.id === tab.id);
 
   if (tabIdx !== -1) {
@@ -181,8 +228,6 @@ function createOrUpdate(tab) {
         tabFavicon: tab.favIconUrl || cachedTabs[tabIdx].tabFavicon,
         lastAccessed: tab.lastAccessed || cachedTabs[tabIdx].lastAccessed,
       };
-
-      console.log("Tab Updated:", tab.title);
     }
   } else {
     // Tab doesn't exist, create a new one
@@ -195,7 +240,6 @@ function createOrUpdate(tab) {
         tab.lastAccessed
       )
     );
-    console.log("New Tab added");
   }
 
   debouncedSave();
@@ -209,30 +253,39 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) =>
   createOrUpdate(tab)
 );
 
-// Handle tab activation (switching between tabs)
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  if (windows.has(activeInfo.windowId)) {
-    const prevTab = windows.get(activeInfo.windowId); // Get the previously active tab in the same window
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  if (cachedTabs.length == 0) {
+    await loadTabsFromStorage();
+  }
+  await loadWindows();
 
-    // Update the last accessed timestamp for the previous tab
+  // Check if this window was previously tracked
+  if (windows.hasOwnProperty(activeInfo.windowId)) {
+    const prevTabId = windows[activeInfo.windowId]; // Previously active tab in this window
+
+    // Update last accessed timestamps only if the previous tab existed
     cachedTabs = cachedTabs.map((tab) => {
-      if (tab.id === prevTab) {
+      if (tab.id === prevTabId || tab.id === activeInfo.tabId) {
         return { ...tab, lastAccessed: Date.now() };
-      } else if (tab.id === activeInfo.tabId) {
-        return { ...tab, lastAccessed: Date.now() };
-      } else {
-        return tab;
       }
+      return tab;
     });
   }
 
-  // Update the active tab in the current window or the newly created tab in a fresh window
-  windows.set(activeInfo.windowId, activeInfo.tabId);
+  // Update or create the active tab entry for this window
+  windows[activeInfo.windowId] = activeInfo.tabId;
+
+  await setWindows(); // Save changes to storage
   debouncedSave();
 });
 
 // Handle tab removal
-chrome.tabs.onRemoved.addListener((tabId) => {
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  if (cachedTabs.length == 0) {
+    console.log("Fetching tabs from storage as the cache is empty...")
+    await loadTabsFromStorage();
+    console.log("Cache is locked and loaded...")
+  }
   if (chrome.runtime.lastError) {
     console.error(
       `Error removing tab with ID: ${tabId.toString()} due to ${
@@ -260,14 +313,13 @@ let intervalId; // Holds the reference to the interval
 // Function to set up the interval with the current inactivity threshold
 async function setupInterval() {
   const intervalTime = await getInactivityThreshold();
-  console.log("Interval Time Set:", intervalTime);
 
   if (intervalId) {
     clearInterval(intervalId); // Clear the existing interval
-    console.log("Previous interval cleared");
   }
 
-  intervalId = setInterval(() => {
+  intervalId = setInterval(async () => {
+    await loadTabsFromStorage();
     // Get all active tabs
     chrome.tabs.query({ active: true }, (tabs) => {
       const activeTabs = new Set();
@@ -280,13 +332,9 @@ async function setupInterval() {
 
       // Filter inactive tabs based on the threshold
       cachedInactiveTabs = cachedTabs.filter(
-        (tab) => (Date.now() - tab.lastAccessed) > intervalTime
+        (tab) => Date.now() - tab.lastAccessed > intervalTime
       );
 
-      console.log(activeTabs);
-      console.log(cachedInactiveTabs);
-
-      console.log(cachedInactiveTabs.length > 0);
 
       // Show notification if there are inactive tabs
       if (cachedInactiveTabs.length > 0) {
@@ -303,12 +351,10 @@ async function setupInterval() {
             ],
           },
           (notificationId) => {
-            console.log(`Notification created with ID: ${notificationId}`);
           }
         );
       }
     });
-
   }, intervalTime);
 }
 
@@ -319,7 +365,6 @@ setTimeout(setupInterval, 1000);
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.inactivityThreshold && areaName === "local") {
     inactivityThreshold = changes.inactivityThreshold.newValue; // Update the threshold
-    console.log("Updated inactivity threshold:", inactivityThreshold);
     setupInterval(); // Re-setup the interval with the new threshold
   }
 });
@@ -332,21 +377,30 @@ chrome.notifications.onButtonClicked.addListener(
         // Clean all inactive tabs
         console.log("Cleaning all Inactive Tabs....");
         const interval = await getInactivityThreshold();
-
+        let wait = true;
         // Remove all inactive tabs
-        cachedInactiveTabs.forEach((tab) => chrome.tabs.remove(tab.id));
+        cachedInactiveTabs.forEach((tab) => {
+          if(wait) {
+            setTimeout(() => {
+              chrome.tabs.remove(tab.id)
+            }, 500)
+            wait = false;
+          } else {
+            chrome.tabs.remove(tab.id);
+          }
+          chrome.tabs.remove(tab.id)
+        }
+      );
 
         const activeTabs = new Set();
 
         chrome.tabs.query({ active: true }, (result) => {
           result.forEach((tab) => activeTabs.add(tab.id));
-          
+
           cachedTabs = cachedTabs.filter(
-            (tab) => (Date.now() - tab.lastAccessed) < interval || activeTabs.has(tab.id)
+            (tab) =>
+              Date.now() - tab.lastAccessed < interval || activeTabs.has(tab.id)
           );
-
-
-          debouncedSave();
         });
       } else if (buttonIndex === 1) {
         // Open a new tab to review inactive tabs
