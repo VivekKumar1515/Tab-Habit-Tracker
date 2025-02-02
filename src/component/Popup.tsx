@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Clock, BarChart2, Trash2, Send } from "lucide-react"
-import { NumberInput } from "./NumberInput"
+import { Clock, BarChart2, Trash2, SettingsIcon } from "lucide-react"
 import { IOSButton } from "./IOSButton"
 import { DomainGroup } from "./DomainGroup"
 import { groupBy } from "lodash"
+import { Settings } from "./Settings"
 
 interface Tab {
   id: number
@@ -31,21 +31,23 @@ const calculateProductivityScore = (activeCount: number, inactiveCount: number) 
 export default function Popup() {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [productivityScore, setProductivityScore] = useState(0)
+  const [groupedTabs, setGroupedTabs] = useState<{ [key: string]: Tab[] }>({})
+  const [showSettings, setShowSettings] = useState(false)
   const [hours, setHours] = useState<number>(0)
   const [minutes, setMinutes] = useState<number>(30)
-  const [groupedTabs, setGroupedTabs] = useState<{ [key: string]: Tab[] }>({})
 
   // Helper to load tabs in chunks
   const loadTabsFromStorage = async () => {
     return new Promise<Tab[]>((resolve, reject) => {
-      chrome.storage.local.get('totalTabChunks', (data) => {
+      chrome.storage.local.get(["totalTabChunks", "inactivityThreshold"], (data) => {
         if (chrome.runtime.lastError || !data.totalTabChunks) {
-          reject(new Error('Error fetching tab chunks'));
-          return;
+          reject(new Error("Error fetching tab chunks"))
+          return
         }
         const totalChunks = data.totalTabChunks
+        const inactivityThreshold = data.inactivityThreshold || { hours: 0, minutes: 30 }
         let loadedTabs: Tab[] = []
-        
+
         const loadChunk = async (index: number) => {
           return new Promise<void>((resolveChunk) => {
             chrome.storage.local.get([`tabs_chunk_${index}`], (chunkData) => {
@@ -65,9 +67,16 @@ export default function Popup() {
           chunkPromises.push(loadChunk(i))
         }
 
-        Promise.all(chunkPromises).then(() => {
-          resolve(loadedTabs)
-        }).catch(reject)
+        Promise.all(chunkPromises)
+          .then(() => {
+            const thresholdMs = (inactivityThreshold.hours * 60 + inactivityThreshold.minutes) * 60000
+            const updatedTabs = loadedTabs.map((tab: Tab) => ({
+              ...tab,
+              isActive: Date.now() - tab.lastAccessed < thresholdMs,
+            }))
+            resolve(updatedTabs)
+          })
+          .catch(reject)
       })
     })
   }
@@ -106,36 +115,39 @@ export default function Popup() {
     setProductivityScore(calculateProductivityScore(activeTabs.length, inactiveTabs.length))
   }, [tabs])
 
-  const removeTab = ((id: number) => {
+  const removeTab = (id: number) => {
     chrome.tabs.remove(id)
     setTabs((prevTabs) => prevTabs.filter((tab) => tab.id !== id))
-  })
+  }
 
   const removeAllInactive = async () => {
     const updatedTabs: Tab[] = []
-    let wait = true;
+    let wait = true
     for (const tab of tabs) {
       if (!tab.isActive) {
         if (wait) {
-          chrome.tabs.remove(tab.id);
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Waits before proceeding
-          wait = false;
-        }
-        else chrome.tabs.remove(tab.id);
+          chrome.tabs.remove(tab.id)
+          await new Promise((resolve) => setTimeout(resolve, 1000)) // Waits before proceeding
+          wait = false
+        } else chrome.tabs.remove(tab.id)
       } else {
-        updatedTabs.push(tab);
+        updatedTabs.push(tab)
       }
     }
 
     setTabs(updatedTabs)
   }
 
-  const submitInactivityThreshold = () => {
-    const inactivityThreshold = { hours: hours, minutes: minutes }
+  const inactiveTabs = tabs.filter((tab) => !tab.isActive)
+
+  const toggleSettings = () => setShowSettings(!showSettings)
+
+  const updateInactivityThreshold = (newHours: number, newMinutes: number) => {
+    setHours(newHours)
+    setMinutes(newMinutes)
+    const inactivityThreshold = { hours: newHours, minutes: newMinutes }
     chrome.storage.local.set({ inactivityThreshold: inactivityThreshold })
   }
-
-  const inactiveTabs = tabs.filter((tab) => !tab.isActive)
 
   return (
     <motion.div
@@ -144,61 +156,68 @@ export default function Popup() {
       transition={{ duration: 0.3, ease: "easeOut" }}
       className="w-80 p-6 bg-black/95 backdrop-blur-xl text-zinc-50 font-sans border border-zinc-800/50 shadow-2xl overflow-hidden"
     >
-      <div className="mb-8 text-center space-y-1">
+      <div className="mb-8 text-center space-y-1 relative">
         <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-200 via-zinc-100 to-zinc-400 text-transparent bg-clip-text">
           Tabify
         </h1>
         <p className="text-xs text-zinc-400 font-medium tracking-wider uppercase">Smart Tab Management</p>
+        <button
+          onClick={toggleSettings}
+          className="absolute right-0 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          <SettingsIcon size={20} />
+        </button>
       </div>
 
-      <div className="mb-6">
-        <h2 className="text-sm font-medium mb-3 text-zinc-400 uppercase tracking-wider">Inactive Tabs</h2>
-        <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
-          <AnimatePresence>
-            {Object.entries(groupedTabs).map(([domain, domainTabs]) => (
-              <DomainGroup key={domain} domain={domain} tabs={domainTabs} onRemove={removeTab} />
-            ))}
-          </AnimatePresence>
-        </div>
-      </div>
+      {showSettings ? (
+        <Settings
+          onBack={() => setShowSettings(false)}
+          hours={hours}
+          minutes={minutes}
+          onUpdateThreshold={updateInactivityThreshold}
+        />
+      ) : (
+        <>
+          <div className="mb-6">
+            <h2 className="text-sm font-medium mb-3 text-zinc-400 uppercase tracking-wider">Inactive Tabs</h2>
+            <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
+              <AnimatePresence>
+                {Object.entries(groupedTabs).map(([domain, domainTabs]) => (
+                  <DomainGroup key={domain} domain={domain} tabs={domainTabs} onRemove={removeTab} />
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
 
-      <div className="bg-zinc-900/70 backdrop-blur-sm rounded-lg p-4 mb-6 border border-zinc-800/50 shadow-inner">
-        <div className="flex items-center justify-between mb-2">
-          <span className="flex items-center text-zinc-400">
-            <Clock size={16} className="mr-2" /> Active tabs
-          </span>
-          <span className="font-medium text-zinc-200">{tabs.filter((tab) => tab.isActive).length}</span>
-        </div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="flex items-center text-zinc-400">
-            <Clock size={16} className="mr-2" /> Inactive tabs
-          </span>
-          <span className="font-medium text-zinc-200">{inactiveTabs.length}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="flex items-center text-zinc-400">
-            <BarChart2 size={16} className="mr-2" /> Productivity score
-          </span>
-          <span className="font-medium text-zinc-200">{productivityScore}%</span>
-        </div>
-      </div>
+          <div className="bg-zinc-900/70 backdrop-blur-sm rounded-lg p-4 mb-6 border border-zinc-800/50 shadow-inner">
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center text-zinc-400">
+                <Clock size={16} className="mr-2" /> Active tabs
+              </span>
+              <span className="font-medium text-zinc-200">{tabs.filter((tab) => tab.isActive).length}</span>
+            </div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center text-zinc-400">
+                <Clock size={16} className="mr-2" /> Inactive tabs
+              </span>
+              <span className="font-medium text-zinc-200">{inactiveTabs.length}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center text-zinc-400">
+                <BarChart2 size={16} className="mr-2" /> Productivity score
+              </span>
+              <span className="font-medium text-zinc-200">{productivityScore}%</span>
+            </div>
+          </div>
 
-      <div className="flex justify-between mb-6 space-x-3">
-        <IOSButton onClick={removeAllInactive} className="flex-1">
-          <Trash2 size={14} className="inline mr-1" /> Remove All
-        </IOSButton>
-      </div>
-
-      <div className="bg-zinc-900/70 backdrop-blur-sm rounded-lg p-4 border border-zinc-800/50 shadow-inner">
-        <h2 className="text-sm font-medium mb-3 text-zinc-400 uppercase tracking-wider">Inactivity Threshold</h2>
-        <div className="flex justify-center items-center mb-3 space-x-4">
-          <NumberInput value={hours} onChange={setHours} min={0} max={23} label="Hours" />
-          <NumberInput value={minutes} onChange={setMinutes} min={1} max={59} label="Minutes" />
-        </div>
-        <IOSButton onClick={submitInactivityThreshold} className="w-full">
-          <Send size={14} className="inline mr-1" /> Set Threshold
-        </IOSButton>
-      </div>
+          <div className="flex justify-between mb-6 space-x-3">
+            <IOSButton onClick={removeAllInactive} className="flex-1">
+              <Trash2 size={14} className="inline mr-1" /> Remove All
+            </IOSButton>
+          </div>
+        </>
+      )}
     </motion.div>
   )
 }
+

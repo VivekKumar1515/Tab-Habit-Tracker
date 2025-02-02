@@ -366,6 +366,7 @@ async function checkInactiveTabs() {
           { title: "Clean All Inactive Tabs" },
           { title: "Review Tabs" },
         ],
+        priority: 2,
       }, (notificationId) => {
         console.log("notification created with id : ", notificationId)
       });
